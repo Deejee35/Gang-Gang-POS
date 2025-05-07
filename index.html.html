@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Simple POS System</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; }
+    input[type="text"], input[type="number"] { padding: 0.5em; font-size: 1em; width: 300px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+    th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+    #total { font-size: 1.5em; margin-top: 1em; }
+    #searchResults { margin-top: 1em; }
+    .search-item { cursor: pointer; padding: 0.5em; border: 1px solid #ccc; margin: 2px 0; background: #f9f9f9; }
+  </style>
+</head>
+<body>
+  <h1>Simple POS System</h1>
+
+  <label for="excelFile">Upload Excel File:</label>
+  <input type="file" id="excelFile" accept=".xlsx,.xls">
+  <br><br>
+
+  <label for="barcode">Scan or Enter Barcode:</label><br>
+  <input type="text" id="barcode" autofocus onkeypress="handleKey(event)">
+
+  <div id="searchBox" style="margin-top: 1em; display:none;">
+    <label for="search">Search for item by name:</label><br>
+    <input type="text" id="search" oninput="searchItems()">
+    <div id="searchResults"></div>
+  </div>
+
+  <table id="itemTable">
+    <thead>
+      <tr><th>Item Name</th><th>Price</th><th>Quantity</th><th>Subtotal</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="total">Total: $0.00</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>
+    let items = {};
+    let total = 0;
+
+    document.getElementById("excelFile").addEventListener("change", function(e) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        // Assuming headers are at row 0, and barcode in column B (1), name in C (2), price in G (6)
+        json.slice(1).forEach(row => {
+          const barcode = row[1];
+          const name = row[2];
+          const price = parseFloat(row[6]);
+          if (barcode && name && !isNaN(price)) {
+            items[barcode.toString()] = { name, price };
+          }
+        });
+        alert("Item data loaded successfully!");
+      };
+      reader.readAsArrayBuffer(e.target.files[0]);
+    });
+
+    function handleKey(e) {
+      if (e.key === 'Enter') {
+        const code = e.target.value.trim();
+        const item = items[code];
+        if (item) {
+          addItemToTable(item);
+          document.getElementById("searchBox").style.display = "none";
+        } else {
+          alert("Item not found! Try searching by name.");
+          document.getElementById("searchBox").style.display = "block";
+          document.getElementById("search").focus();
+        }
+        e.target.value = "";
+      }
+    }
+
+    function addItemToTable(item) {
+      const table = document.querySelector("#itemTable tbody");
+      const row = document.createElement("tr");
+      const qty = 1;
+      const subtotal = item.price * qty;
+      row.innerHTML = `
+        <td>${item.name}</td>
+        <td><input type="number" value="${item.price.toFixed(2)}" onchange="updateRowTotal(this)"></td>
+        <td><input type="number" value="${qty}" min="1" onchange="updateRowTotal(this)"></td>
+        <td class="subtotal">$${subtotal.toFixed(2)}</td>
+      `;
+      table.appendChild(row);
+      total += subtotal;
+      updateTotal();
+    }
+
+    function updateRowTotal(input) {
+      const row = input.closest("tr");
+      const price = parseFloat(row.children[1].children[0].value);
+      const qty = parseInt(row.children[2].children[0].value);
+      const newSubtotal = price * qty;
+      row.querySelector(".subtotal").textContent = `$${newSubtotal.toFixed(2)}`;
+      recalculateTotal();
+    }
+
+    function recalculateTotal() {
+      total = 0;
+      document.querySelectorAll("#itemTable tbody tr").forEach(row => {
+        const price = parseFloat(row.children[1].children[0].value);
+        const qty = parseInt(row.children[2].children[0].value);
+        total += price * qty;
+      });
+      updateTotal();
+    }
+
+    function updateTotal() {
+      document.getElementById("total").textContent = `Total: $${total.toFixed(2)}`;
+    }
+
+    function searchItems() {
+      const query = document.getElementById("search").value.toLowerCase();
+      const results = document.getElementById("searchResults");
+      results.innerHTML = "";
+      for (const [barcode, item] of Object.entries(items)) {
+        if (item.name.toLowerCase().includes(query)) {
+          const div = document.createElement("div");
+          div.className = "search-item";
+          div.textContent = `${item.name} - $${item.price.toFixed(2)}`;
+          div.onclick = () => {
+            addItemToTable(item);
+            document.getElementById("searchBox").style.display = "none";
+            document.getElementById("search").value = "";
+          };
+          results.appendChild(div);
+        }
+      }
+    }
+  </script>
+</body>
+</html>
